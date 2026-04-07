@@ -10,6 +10,10 @@ static ImVec2 offset = { 0, 0 };
 static ImVec2 dragStart = { 0, 0 };
 static bool isDragging = false;
 
+static bool isDraggingObject = false;
+static ImVec2 dragObjectStartPos = { 0, 0 };
+static int draggedObjectIndex = -1;
+static const float GRID_SIZE = 10.0f;
 void zeichneObjecktImRenderTarget(const Objeckte& obj, float scale, ImVec2 offset) {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
@@ -93,6 +97,8 @@ void zeigeAnzeigeFenster() {
         zoom = 1.0f;
         offset = ImVec2(0, 0);
     }
+    ImGui::SameLine();
+    ImGui::Text("(Strg = Raster)");
 
     ImGui::Separator();
 
@@ -158,6 +164,8 @@ void zeigeAnzeigeFenster() {
                 (mousePos.y - canvasPos.y) / zoom - offset.y);
 
             selectedObjectIndex = -1;
+            isDraggingObject = false;
+
             for (int i = (int)objeckteListe.size() - 1; i >= 0; i--) {
                 const auto& obj = objeckteListe[i];
                 float x = obj.PositionX;
@@ -197,6 +205,62 @@ void zeigeAnzeigeFenster() {
                 }
             }
         }
+
+        if (selectedObjectIndex >= 0 && selectedObjectIndex < (int)objeckteListe.size() &&
+            ImGui::IsMouseDragging(ImGuiMouseButton_Left) && !isDraggingObject) {
+
+            ImVec2 dragDelta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
+            if (fabs(dragDelta.x) > 5.0f || fabs(dragDelta.y) > 5.0f) {
+                isDraggingObject = true;
+                draggedObjectIndex = selectedObjectIndex;
+                dragObjectStartPos.x = objeckteListe[selectedObjectIndex].PositionX;
+                dragObjectStartPos.y = objeckteListe[selectedObjectIndex].PositionY;
+            }
+        }
+
+        if (isDraggingObject && draggedObjectIndex >= 0 &&
+            draggedObjectIndex < (int)objeckteListe.size()) {
+
+            ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
+            ImVec2 newPos;
+            newPos.x = dragObjectStartPos.x + delta.x / zoom;
+            newPos.y = dragObjectStartPos.y + delta.y / zoom;
+
+            // Strg-Taste: Rastereinrastung
+            if (ImGui::GetIO().KeyCtrl) {
+                newPos.x = round(newPos.x / GRID_SIZE) * GRID_SIZE;
+                newPos.y = round(newPos.y / GRID_SIZE) * GRID_SIZE;
+            }
+
+            objeckteListe[draggedObjectIndex].PositionX = newPos.x;
+            objeckteListe[draggedObjectIndex].PositionY = newPos.y;
+        }
+
+        if (isDraggingObject && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            isDraggingObject = false;
+            draggedObjectIndex = -1;
+            ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
+        }
+
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_OBJECT")) {
+                size_t sourceIndex = *(const size_t*)payload->Data;
+                if (sourceIndex < objeckteListe.size()) {
+                    Objeckte neuesObjekt = objeckteListe[sourceIndex];
+                    neuesObjekt.name = "Kopie_" + neuesObjekt.name;
+
+                    ImVec2 mousePos = ImGui::GetMousePos();
+                    ImVec2 canvasMousePos((mousePos.x - canvasPos.x) / zoom - offset.x,
+                        (mousePos.y - canvasPos.y) / zoom - offset.y);
+
+                    neuesObjekt.PositionX = canvasMousePos.x - 25;
+                    neuesObjekt.PositionY = canvasMousePos.y - 25;
+
+                    objeckteListe.push_back(neuesObjekt);
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
     }
 
     // Objekte im Canvas zeichnen
@@ -209,5 +273,4 @@ void zeigeAnzeigeFenster() {
 }
 void zeichneObjeckteImFenster() {
     // Diese Funktion wird nicht mehr benötigt, da alles in zeigeAnzeigeFenster() integriert ist
-    // Sie kann leer bleiben oder entfernt werden
 }
